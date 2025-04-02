@@ -1,8 +1,8 @@
-= patchbuddy
+# patchbuddy
 
 Simple script passing a patch from STDIN to a ramalama API endpoint, requesting a feedback.
 
-=== feedback
+### feedback
 ```
 $ git show 2cc5e0de81ab1fdc9ea6ee20ed54939eaf471e82 | patchbuddy
 "Summary of Code Changes:
@@ -22,7 +22,7 @@ Code Quality Rating (1-5): 2
 The code quality is rated as a 2, which is relatively good. The changes are well-structured and easy to understand. However, there is room for improvement in terms of robustness, testing, and documentation."
 ```
 
-=== summary
+### summary
 
 ```
 $ git show 2cc5e0de81ab1fdc9ea6ee20ed54939eaf471e82 | patchbuddy summary
