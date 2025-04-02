@@ -1,0 +1,73 @@
+#!/bin/bash
+
+AI_URL="http://127.0.0.1:8080"
+
+if [ "$1" == "-d" ]; then
+  DEBUG=true
+  shift
+else
+  DEBUG=false
+fi
+
+if [ "$1" == "-i" ]; then
+    INPUTFILE="$2"
+    [ "$INPUTFILE" == "-" ] && INPUTFILE=""
+    shift 2
+fi
+
+if [ "$1" == "-u" ]; then
+    AI_URL="$2"
+    shift 2
+fi
+
+if [ "$1" == "" ]; then
+  INSTRUCTIONS="You are doing a review of a user provided git diff. Assess code quality and if changes are properly described. At first summarize code changes and then assess code quality and what should be eventually improved. At the end, rate the code quality on the scale 1 to 5 where 1 is the best and 5 is the worst."
+elif [ "$1" == "summary" ]; then
+  INSTRUCTIONS="You are generating a very short pull-request description for changes made by the user provided git diff. The output should be in the markdown format."
+elif [ "$1" == "review" ]; then
+  INSTRUCTIONS="You are doing a review of a user provided git diff. Assess code quality and if changes are properly described. Do not summarize changes, only evaluate code quality and what should be eventually improved. At the end, rate the code quality on the scale 1 to 5 where 1 is the best and 5 is the worst."
+else
+  echo "Unknown subcommand."
+  echo "Usage: $0 [ -d ]  [ -i INPUTFILE ] [ -u API_URL ] [summary|review]"
+  exit 1
+fi
+
+# check ramalama status
+if ! curl -s "$AI_URL/health" | grep -q '"status":"ok"'; then
+  echo >&2 "Cannot connect to ramalama on $AI_URL"
+  echo >&2 "Start ramalama e.g. with: "
+  echo >&2 '  $ ramalama pull ollama://granite3.1-dense'
+  echo >&2 '  $ ramalama serve granite3.1-dense:latest'
+  exit 1
+fi
+
+# build JSON query
+DATA=$( mktemp )
+echo -n '{"messages":[{"role":"system","content":"' > $DATA
+echo -n "$INSTRUCTIONS" >> $DATA
+echo -n '"},{"role":"user","content":' >> $DATA
+# read patch from STDIN
+cat $INPUTFILE | jq -sR . >> $DATA
+echo '}]}' >> $DATA
+#echo '}],"stream":false,"cache_prompt":false,"samplers":"edkypmxt","temperature":0.8,"dynatemp_range":0,"dynatemp_exponent":1,"top_k":40,"top_p":0.95,"min_p":0.05,"typical_p":1,"xtc_probability":0,"xtc_threshold":0.1,"repeat_last_n":64,"repeat_penalty":1,"presence_penalty":0,"frequency_penalty":0,"dry_multiplier":0,"dry_base":1.75,"dry_allowed_length":2,"dry_penalty_last_n":-1,"max_tokens":-1,"timings_per_token":false}' >> $DATA
+
+if $DEBUG; then
+  echo "## QUERY DATA ########################################"
+  cat $DATA
+  echo "######################################################"
+fi
+
+# do the query on ramalama
+RESPONSE=$( mktemp )
+curl -s -X POST -H "Content-Type: application/json" --data-binary @$DATA "$AI_URL/v1/chat/completions" -o $RESPONSE
+
+if $DEBUG; then
+  echo "## RESPONSE ##########################################"
+  cat $RESPONSE
+  echo "######################################################"
+fi
+
+# print reponse
+echo -e "$( jq '.choices[0].message.content' $RESPONSE )"
+
+rm $DATA $RESPONSE
